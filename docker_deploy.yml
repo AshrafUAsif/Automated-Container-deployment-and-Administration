@@ -1,0 +1,63 @@
+---
+- name: Deploy Apache Docker Container using Ansible
+  hosts: Managed_Node1
+  become: true
+  tasks:
+    - name: Configure Docker Repository
+      yum_repository:
+        name: Docker
+        description: "Docker Repo"
+        baseurl: "https://download.docker.com/linux/centos/docker-ce.repo"
+        gpgcheck: no
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Docker (Debian)
+      apt:
+        name: docker.io
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Starting Docker Daemon (Debian)
+      service:
+        name: docker
+        state: started
+       when: ansible_os_family == "Debian"
+
+    - name: Pull Apache Docker Image
+      docker_image:
+        name: httpd
+        tag: latest
+        source: pull
+      register: z
+
+    - name: Creating a persistence Volume Directory
+      file:
+        path: "/home/ec2-user/httpd"
+        state: directory
+
+    - name: Copy index.html to host directory
+      copy:
+        src: "/home/ec2-user/index.html"
+        dest: "/home/ec2-user/httpd/index.html"
+
+    - name: Configure Networking for Apache Container
+      docker_network:
+	name: apache_network
+        driver: bridge
+        ipam_config:
+          - subnet: "172.168.10.0/30"
+
+    - name: Run Apache Docker Container
+      docker_container:
+        name: apache-httpd
+        image: httpd
+        state: started
+        restart_policy: always
+        exposed_ports:
+          - "80"
+        ports:
+          - "8888:80"
+        volumes:
+          - "/home/ec2-user/httpd:/usr/local/apache2/htdocs"
+        networks:
+          - name: apache_network
